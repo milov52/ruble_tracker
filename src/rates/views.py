@@ -1,4 +1,8 @@
 from django.db.models import F
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
+
 from rest_framework import viewsets, status, generics, filters, mixins
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -8,6 +12,7 @@ from .models import Rate, UserCurrencyTracking
 from .serializers import RatesSerializer, UserCurrencySerializer, UserSerializer, CurrencyAnalyticsSerializer
 
 from ruble_tracker.tasks import update_rates
+
 
 class RegistrationView(generics.CreateAPIView):
     serializer_class = UserSerializer
@@ -30,14 +35,18 @@ class CurrencyAnalyticsViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = CurrencyAnalyticsSerializer
     permission_classes = (IsAuthenticated,)
 
-    def get_queryset(self):
-        date_from = self.request.query_params.get("date_from")
-        date_to = self.request.query_params.get("date_to")
-        return Rate.objects.filter(
+    @method_decorator(cache_page(60 * 60 * 2))
+    @method_decorator(vary_on_headers("Authorization", ))
+    def list(self, request, *args, **kwargs):
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        queryset = Rate.objects.filter(
             currency=self.kwargs.get("id"),
             date__gte=date_from,
             date__lte=date_to
         )
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 class RatesViewSet(viewsets.ModelViewSet):
@@ -55,6 +64,7 @@ class RatesViewSet(viewsets.ModelViewSet):
             currency_ids = [uc.currency.id for uc in users_currencies]
             return Rate.objects.filter(currency__in=currency_ids)
         return Rate.objects.all()
+
 
 class AddCurrencyViewSet(APIView):
 
