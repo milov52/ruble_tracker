@@ -1,0 +1,38 @@
+version: '3'
+
+services:
+  redis:
+    image: redis
+    restart: always
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A ruble_tracker worker -l info
+    volumes:
+       - ./src:/opt/app/src/
+    depends_on:
+      - redis
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A ruble_tracker beat -l info
+    volumes:
+       - ./src:/opt/app/src/
+    depends_on:
+      - redis
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./src:/opt/app/src/
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
